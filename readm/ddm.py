@@ -58,7 +58,7 @@ class TwoBoundariesFPT(distributions.Distribution):
         lp.masked_scatter_(non_inf_idx, p0+p1)
         return lp
 
-    def cdf(self, value):
+    def cdf(self, value, contitioned_on_boundary=False):
         rt, c, a, v, w, t0 = self._prepare_params(value)
         T0=0.2397217965550664
         n=8
@@ -69,7 +69,11 @@ class TwoBoundariesFPT(distributions.Distribution):
         V = torch.zeros_like(rt)
         V.masked_scatter_(idx_small, DDM_cdf_small(a[idx_small], v[idx_small], w[idx_small], rt[idx_small]))
         V.masked_scatter_(idx_large, DDM_cdf_large(a[idx_large], v[idx_large], w[idx_large], rt[idx_large], n, c[idx_large]))
-        return V.clamp(EPS, 1.0)
+        V =  V.clamp(EPS, 1.0)
+        if contitioned_on_boundary:
+            norm = ddm_avg(self.a, self.v, self.w, 1.0, self.c)
+            V = V / norm
+        return V
 
     def rsample(self, sample_shape=torch.Size()):
         samples_val, choices_relaxed = ddm_rand_inv_cdf(sample_shape, self.a, self.v, self.w, self.t0, reparameterised=True)

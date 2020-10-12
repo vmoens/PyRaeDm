@@ -1,2 +1,2 @@
-# PyReaDm
-PyTorch version of the ReaDm
+# PyRaeDm
+PyTorch version of the RaeDm

@@ -352,7 +352,7 @@ def ddm_rand_inv_cdf(shape, a, v, w, t0, alpha=0.1, decay=0.95, maxiter=1000, th
 
         prev_diff = diff
         diff = abs(fx)
-        dones_current_sum = (diff<thr).sum() - dones.sum()
+        dones_current_sum = ((diff<thr).sum() - dones.sum()).item()
         dones[diff<thr] = True
         idx_keep = diff<prev_diff
         x0[idx_keep] = new_x0[idx_keep]

@@ -62,6 +62,7 @@ class FIVO(nn.Module):
 
         log_w = 0.0
         log_p = 0.0
+        _r = None
         for i, (_x, _y) in enumerate(zip(x_split, y_split)):
             _x = _x.unsqueeze(0).expand(self.n_particles, *_x.shape).permute(1,0,2)
             _y = _y.unsqueeze(0).expand(self.n_particles, *_y.shape).permute(1,0,2)
@@ -69,9 +70,10 @@ class FIVO(nn.Module):
             prior = self._make_prior(z)
 
             _x = torch.cat([_x, z, _y], -1) # Add _r ?
-            _r = self.recurrent_model(_x.view(-1, _x.shape[-1])).view(*_x.shape[:2], -1)
+            _r = self.recurrent_model(_x.view(-1, _x.shape[-1]), _r)
+            _rview = _r.view(*_x.shape[:2], -1)
 
-            posterior = self._make_posterior(_r, _y)
+            posterior = self._make_posterior(_rview, _y)
 
             z = posterior.rsample()
             data_dist = self._make_data_dist(z)

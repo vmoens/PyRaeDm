@@ -1,6 +1,18 @@
 # PyTorch version of the RaeDm model
 
-This repo currently (only) provides a ddm distribution class, TwoBoundariesFPT (FPT = First Passage Time density).
+## RaeDm
+The Recurrent Auto-Encoding Diffusion Model (RaeDm) is a Sequential-monte carlo based inference tool for behavioural modelling
+that does not assume independence between successive trials.
+
+## Installation
+To PyRaeDm install using pip, run
+`python -m pip install git+https://github.com/vmoens/PyRaeDm.git@master`
+
+## Experiment Template
+A script that generates fake data and fits a very crude version of the RaeDm is available in [scripts/test_fivo.py](scripts/test_fivo.py).
+
+## DDM: First Passage Time density
+This repo currently provides a ddm distribution class, TwoBoundariesFPT (FPT = First Passage Time density).
 Here is a toy example of how to use it when training a neural net whose output is a DDM distribution:
 ```
 import torch
@@ -34,4 +46,7 @@ This distribution has also several other features that may come in handy: `ddm.c
 One can also sample efficiently from the given distribution using `ddm.sample()`, and reparameterised samples can be gathered using `ddm.rsample()`. Note that in this case the second element (i.e. the choice) will be a real value between -1 and 1, and must be rounded to one of these for usage in the ddm class.
 This sampling method uses Newton's method: first, generate a target CDF value at random, then generate a boundary at random given marginal probability of hitting upper/lower boundary, finally optimise the RT using NM to match the random (conditioned) CDF generated before. This should be several order of magnitudes faster than Euler's method commonly used, and much more secure than MCMC methods.
 
-Later devs: FIVO implementation, tricks for reparameterisation of t0.
+## Disclosure -- missing features
+Missing trials cannot be accounted for currently, but this would be a rather straightfoward thing to implement when the 
+time-out limit is provided: $p(RT>TO) = 1-CDF(TO)$.
+

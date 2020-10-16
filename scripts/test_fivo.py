@@ -1,7 +1,6 @@
-from raedm.fivo import FIVO, RaeDm
+from raedm import FIVO, TwoBoundariesFPT, RaeDm
 from torch.nn.utils import clip_grad_norm_
 import tqdm
-from raedm.ddm import TwoBoundariesFPT
 from torch import nn, autograd
 import torch
 from raedm.utils import init_weights

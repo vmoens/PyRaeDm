@@ -6,7 +6,7 @@ that does not assume independence between successive trials.
 
 ## Installation
 To PyRaeDm install using pip, run
-`python -m pip install git+https://github.com/vmoens/PyRaeDm.git@master`
+`python -m pip install git+https://github.com/vmoens/PyRaeDm.git`.
 
 ## Experiment Template
 A script that generates fake data and fits a very crude version of the RaeDm is available in [scripts/test_fivo.py](scripts/test_fivo.py).

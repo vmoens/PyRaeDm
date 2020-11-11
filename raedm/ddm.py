@@ -7,7 +7,7 @@ from torch import distributions
 T0 = 0.2397217965550664
 n = 8
 m = 4
-EPS = 1e-8
+EPS = 1e-6
 class TwoBoundariesFPT(distributions.Distribution):
     def __init__(self, a, v, w, t0):
         super().__init__()
@@ -29,8 +29,8 @@ class TwoBoundariesFPT(distributions.Distribution):
         }
     def _prepare_params_rand(self):
         a, v, w, t0 = self.a, self.v, self.w, self.t0
-        a = ddm_mapa(a)
-        w = torch.sigmoid(w)
+        # a = ddm_mapa(a)
+        # w = torch.sigmoid(w)
         return a, v, w, t0
 
     def _prepare_params(self, value):
@@ -87,7 +87,7 @@ class TwoBoundariesFPT(distributions.Distribution):
         return ddm_rand_inv_cdf(sample_shape, a, v, w, t0)
 
 def ddm_mapa(a):
-    return F.softplus(a)
+    return F.softplus(a+0.5413248538970947)
 
 def ddm_p0(a, v, w, t):
     return -a * v * w - 2 * a.log() - t * v.pow(2)/2
@@ -248,6 +248,13 @@ def ddm_avgrt(a,v,w,t0,s=1):
 def _psi(x, y, v):
     return (2 * v * y).exp() - (2* v * x).exp()
 
+def logdiffexp(a, b):
+    idmax = (a>b).to(a.dtype)
+    x = a*idmax + b*(1-idmax)
+    y = a*(1-idmax) + b*idmax
+    z = x + torch.log1p(- torch.exp(y - x))
+    return z
+
 def ddm_avgrt_cond(a,v,w,t0,c):
     # Grasman 2009
 
@@ -256,7 +263,25 @@ def ddm_avgrt_cond(a,v,w,t0,c):
     w = torch.sigmoid(-c*w)
     z = w*a
 
-    return t0 + (z * (_psi(z-a, a, v) + _psi(0, z, v)) + 2 * a * _psi(z, 0, v)) / v / _psi(z, a, v) / _psi(-a, 0, v)
+    # num2 = z * ((2*v*a).exp()-(2*v*(z-a)).exp()+(2*v*z).exp()-1) + 2 * a * (1-(2*v*z).exp())
+    # num2 = z * (torch.logaddexp(2*v*a, 2*v*z).exp() -(2*v*(z-a)).exp()-1) - 2 * a * (2*v*z).expm1()
+
+    # denum2 = v * ((2*a*v).exp()-(2*z*v).exp())*(1-(-a*2*v).exp())
+    # denum2 = -v * ((2*a*v).exp()-(2*z*v).exp())*(-a*2*v).expm1()
+    # denum2 = -v * (1 - (2*z*v-a*2*v).exp()-(2*a*v).exp() + (2*z*v).exp())
+    # denum2 = -v * (1 - torch.logaddexp(2*v*(z-a), 2*a*v).exp() + (2*z*v).exp())
+
+    num = (z * (_psi(z-a, a, v) + _psi(0, z, v)) + 2 * a * _psi(z, 0, v))
+    denum = v * _psi(z, a, v) * _psi(-a, 0, v)
+    v0 = (num / denum).clamp_min(EPS)
+    v1 = - a.pow(2) * ((-1.0)+w)*w
+
+    out = torch.zeros_like(v1)
+    # idx = abs(v)>1e-4
+    idx = v0 > EPS*1.01
+    out.masked_scatter_(idx, v0[idx])
+    out.masked_scatter_(~idx, v1[~idx])
+    return t0+out
 
 def ddm_varrt(a,v,w,t0, s=1):
     # Grasman 2009
@@ -318,13 +343,13 @@ def ddm_rand_inv_cdf(shape, a, v, w, t0, alpha=0.1, decay=0.95, maxiter=1000, th
 
 
     target = out[..., 0]
-    x0 = ddm_avgrt_cond(a, v, w, t0, choices)
+    x0 = ddm_avgrt_cond(a, v, w, t0, choices).clamp_max(10.0)
     t = TwoBoundariesFPT(a, v, w, t0)
     x = torch.stack([x0, choices], -1)
     cdf = t.cdf(x)
     norm = ddm_avg(a, v, w, 1, choices)
     fx = (cdf - target * norm)
-    inv_cdf_grad = (-t.log_prob(x)).exp()
+    inv_cdf_grad = (-t.log_prob(x)).clamp_max(30.0).exp()
 
     diff = abs(cdf / norm - out[..., 0])
     i=0
@@ -336,19 +361,24 @@ def ddm_rand_inv_cdf(shape, a, v, w, t0, alpha=0.1, decay=0.95, maxiter=1000, th
     # dones_current_sum = 0
     while (diff>thr).any() and (i<=maxiter):
         step = fx*inv_cdf_grad
+        idx = ~torch.isfinite(step)
+        if idx.any():
+            print(a[idx], w[idx], t0[idx], v[idx])
+        # if idx.any():
+        #     step.masked_scatter_(idx, (x0[idx]-t0[idx])/alpha[idx]+0.1)
         new_x0 = x0 - alpha*step
 
         lam = 0.5
         idx = (new_x0<=t0)
         while idx.any():
-            new_x0[idx] = x0[idx] - alpha*lam*step[idx]
+            new_x0[idx] = x0[idx] - (alpha*lam*step)[idx]
             idx = new_x0<=t0
             lam /= 2
 
         x = torch.stack([new_x0, choices], -1)
         cdf = t.cdf(x)
         fx = (cdf - target*norm)
-        inv_cdf_grad = (-t.log_prob(x)).exp()
+        inv_cdf_grad = (-t.log_prob(x)).clamp_max(30.0).exp()
 
         prev_diff = diff
         diff = abs(fx)
@@ -362,6 +392,7 @@ def ddm_rand_inv_cdf(shape, a, v, w, t0, alpha=0.1, decay=0.95, maxiter=1000, th
 
         i += 1
         pbar.update(dones_current_sum)
+        pbar.set_description(f'iter: {i}/{maxiter}')
         # pbar.set_description(f'cdf: {(cdf/norm).item(): 4.2f}, target: {out[..., 0].item(): 4.2f}, '
         #                      f'step: {(cdf*inv_cdf_grad).item(): 4.2f}, alpha: {alpha.item(): 4.2f}, '
         #                      f'diff: {diff.item()}')

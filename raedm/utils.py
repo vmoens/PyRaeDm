@@ -5,6 +5,43 @@ from torch import nn
 import torch
 import numpy as np
 
+class CancelGrad(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, *params):
+        with torch.set_grad_enabled(True):
+            ctx.save_for_backward(x, *params)
+        return x.detach().requires_grad_(x.requires_grad)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        with torch.set_grad_enabled(True):
+            x, *params = ctx.saved_tensors
+            grads = torch.autograd.grad(x, params, grad_output, True)
+        return (None, *grads)
+cancel_grad = CancelGrad.apply
+def systematic_resampling(w, N):
+    # replace nans
+    w.data.masked_fill_(~torch.isfinite(w), 1e-12)
+    w /= w.sum(dim=-1, keepdim=True)
+
+    U1 = torch.rand(w.shape[0], 1, device=w.device) / N
+    Ui = torch.stack([U1] + [U1 + (i - 1) / N for i in range(2, N + 1)], -1)
+    cw = w.cumsum(-1)
+    cw_stack = torch.cat([
+        torch.zeros_like(cw[:, :1]),
+        cw[:, :-1]
+    ], -1).unsqueeze(-1)
+    cw = cw.unsqueeze(-1)
+    try:
+        idx = torch.where((cw_stack < Ui) & (Ui <= cw))[1].view(w.shape[0], N)
+    except:
+        print('systematic resampling failed, trying multinomial')
+        idx = torch.multinomial(w, N, replacement=True)
+        # idx = torch.where((cw_stack <= Ui) & (Ui < cw))[1].view(w.shape[0], N)
+
+    return idx
+
+
 class StackedDistributions(Distribution):
     def __init__(self, dists, sort_index=None, univariates=None):
         batch_shape = dists[0].batch_shape

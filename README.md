@@ -10,10 +10,15 @@ To PyRaeDm install using pip, run
 
 ## Experiment Template
 A script that generates fake data and fits a very crude version of the RaeDm is available in [scripts/test_fivo.py](scripts/test_fivo.py).
+Another script -- based on real data -- is available in [scripts/test_fivo_realdata.py](scripts/test_fivo_realdata.py).
+One should pay attention to the fact that the RaeDm works well if the latent dimension is of size equal or lower to the 
+size of the parameters (i.e. 4). Otherwise, the model only fits the prior to posterior KL divergence, and hence provides
+suprious fits to the data.
 
 ## DDM: First Passage Time density
 This repo currently provides a ddm distribution class, TwoBoundariesFPT (FPT = First Passage Time density).
 Here is a toy example of how to use it when training a neural net whose output is a DDM distribution:
+
 ```
 import torch
 from torch import nn

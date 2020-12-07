@@ -98,5 +98,5 @@ class StackedDistributions(Distribution):
 def init_weights(layer):
     if isinstance(layer, nn.Linear):
         nn.init.xavier_uniform_(layer.weight)
-        if hasattr(layer, 'bias'):
+        if hasattr(layer, 'bias') and layer.bias is not None:
             layer.bias.data.zero_()

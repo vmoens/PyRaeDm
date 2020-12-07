@@ -52,14 +52,14 @@ class FIVO(nn.Module):
     def _make_prior(self, _x, z):
         prior_params = self.prior(torch.cat([_x, z], -1))  # add _r ?
         mu_prior, sig_prior = prior_params.chunk(2, -1)
-        sig_prior = F.softplus(sig_prior + softplus_bias)
+        sig_prior = F.softplus(sig_prior + softplus_bias)+0.1
         prior = d.Independent(d.Normal(mu_prior, sig_prior), 1)
         return prior
 
     def _make_posterior(self, _r, _y):
         posterior_params = self.encoder(_r)
         mu_post, sig_post = posterior_params.chunk(2, -1)
-        sig_post = F.softplus(sig_post + softplus_bias)
+        sig_post = F.softplus(sig_post + softplus_bias)+0.1
         posterior = d.Independent(d.Normal(mu_post, sig_post), 1)
         return posterior
 
@@ -163,7 +163,7 @@ class RaeDm(FIVO):
     def _make_posterior(self, _r, _y):
         posterior_params = self.encoder(_r)
         mu_post, sig_post = posterior_params.chunk(2, -1)
-        sig_post = F.softplus(sig_post + softplus_bias)
+        sig_post = F.softplus(sig_post + softplus_bias)+0.1
         mu_post_t0 = mu_post[..., -1:]
         sig_post_t0 = sig_post[..., -1:]
         t0_dist = d.TransformedDistribution(

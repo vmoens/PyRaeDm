@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     dimx = 7 # regressor size
     hidden = 64 # hidden size
-    latent = 3 # latent size (z variable, last dim = t0)
+    latent = 2 # latent size (z variable, last dim = t0)
     niter = 1000 # number of iterations for optimisation
 
     def mavg(x, coef):
@@ -31,10 +31,12 @@ if __name__ == '__main__':
         return y/corr
 
     x = torch.randn(n_data, sequence_length, dimx) # random regressors
-    a, v, w, t0 = (x @ torch.randn(dimx, 4)).chunk(4, -1) # parameters used for simulation
+    beta = torch.randn(dimx, 4)
+    a, v, w, t0 = (x @ beta).chunk(4, -1) # parameters used for simulation
 
-    t0 = t0/10+0.3
-    a -= 0.5
+    t0 = t0/50+0.3
+    a /= 3
+    a += 0.4
     v = v.sign() * (abs(v)+1)
     w /= 3
 
@@ -45,31 +47,33 @@ if __name__ == '__main__':
     # a += 1 # numerical stability
     y = TwoBoundariesFPT(a.double(), v.double(), w.double(), t0.double()).sample().squeeze(-2).float()
     print(y.shape)
+    print(f'mean: {y[...,0].mean((0,1)).item()}, '
+          f'std: {y[...,0].std((0,1))}, '
+          f'95CI: {y[...,0].mean((0,1)).item()-1.95*y[...,0].std((0,1)).item()} - '
+          f'{y[...,0].mean((0,1)).item()+1.95*y[...,0].std((0,1)).item()}')
 
     # embedder = nn.Identity()
-    embedder = nn.Sequential(nn.Linear(dimx, hidden), nn.Tanh(),
-                             nn.Linear(hidden, hidden), nn.Tanh(),
+    embedder = nn.Sequential(nn.Linear(dimx, hidden), nn.ELU(),
+                             nn.Linear(hidden, hidden), nn.ELU(),
                              nn.Linear(hidden, dimx))
     recurrent = nn.GRUCell(dimx+latent+2, hidden)
     # encoder (and prior) outputs loc and scale of approximate posterior (and prior)
-    encoder = nn.Sequential(nn.Linear(hidden, hidden), nn.Tanh(),
-                            nn.Linear(hidden, hidden), nn.Tanh(),
+    encoder = nn.Sequential(nn.Linear(hidden, hidden), nn.ELU(),
+                            nn.Linear(hidden, hidden), nn.ELU(),
                             nn.Linear(hidden, 2*latent))
-    prior = nn.Sequential(nn.Linear(latent + dimx, hidden), nn.Tanh(),
-                          nn.Linear(hidden, hidden), nn.Tanh(),
+    prior = nn.Sequential(nn.Linear(latent + dimx, hidden), nn.ELU(),
+                          nn.Linear(hidden, hidden), nn.ELU(),
                           nn.Linear(hidden, 2*latent))
     # decoder outputs a, v, w but not t0, which is taken directly from the posterior because it is encoded as a trucated Gaussian
     decoder = nn.Sequential(
-        nn.Linear(latent - 1, hidden), nn.Tanh(),
-        nn.Linear(hidden, hidden), nn.Tanh(),
-        nn.Linear(hidden, 3))
+        nn.Linear(latent-1, hidden), nn.ELU(),
+        nn.Linear(hidden, hidden), nn.ELU(),
+        nn.Linear(hidden, 3, bias=False)
+    )
 
     raedm = RaeDm(embedder, encoder, recurrent, decoder, prior, latent).to(device)
     # init weights and biases
     raedm.apply(init_weights)
-    # make sure that t0 mean is on average = -1
-    raedm.encoder[-1].bias.data[latent] -= 1
-    # f(x, y)
 
     optim = torch.optim.Adam(raedm.parameters(), weight_decay=1e-2)
     dataset = torch.utils.data.TensorDataset(x, y)
@@ -104,8 +108,6 @@ if __name__ == '__main__':
             for i in range(4):
                 plt.subplot(2, 4, i + 1)
                 p = params[..., i]
-                # if i==3:
-                #     p = p/10
                 plt.plot(p[0].detach().cpu().t(), label=i)
                 plt.plot(orig_params[i][0].detach().cpu(), ls='--', label='true value')
 

@@ -332,6 +332,8 @@ def ddm_avg(a,v,w,s,c):
 
 
 def ddm_rand_inv_cdf(shape, a, v, w, t0, alpha=0.1, decay=0.95, maxiter=1000, thr=1e-3, reparameterised = False):
+    if a.dtype is not torch.double:
+        print('Warning: sampling should be achieved with double precision.')
     out = torch.rand(*shape, *a.shape, 2, device=a.device, dtype=a.dtype)
     choices_prob = ddm_avg(a, v, w, 1, torch.ones_like(a))
     if reparameterised:
